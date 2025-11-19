@@ -1,16 +1,25 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
-import { useLoadScript } from '@react-google-maps/api';
+import React, { useEffect, useRef, useState, ChangeEvent, FormEvent, KeyboardEvent } from 'react';
+import { useMapsLibrary } from '@vis.gl/react-google-maps';
 
-const libraries = ['places']; // avoid re-creating the array on each render
+// Define the shape of our state
+interface StudySpotState {
+  name: string;
+  description: string;
+  address: string;
+  tags: string[];
+  coordinates: { lat: number; lng: number };
+  image: string;
+}
 
 const AddStudySpot = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  const [studySpot, setStudySpot] = useState({
+  // Explicitly tell TypeScript what this state looks like
+  const [studySpot, setStudySpot] = useState<StudySpotState>({
     name: '',
     description: '',
     address: '',
@@ -19,12 +28,14 @@ const AddStudySpot = () => {
     image: '',
   });
 
-  const handleChange = (e) => {
+  // Type the change event (works for input and textarea)
+  const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setStudySpot((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleTagToggle = (tag) => {
+  // Type the tag argument
+  const handleTagToggle = (tag: string) => {
     setStudySpot((prev) => {
       const currentTags = [...prev.tags];
       if (currentTags.includes(tag)) {
@@ -35,7 +46,8 @@ const AddStudySpot = () => {
     });
   };
 
-  const handleSubmit = async (e) => {
+  // Type the form submission
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     setError('');
@@ -60,7 +72,8 @@ const AddStudySpot = () => {
       const result = await response.json();
       setSuccess('Study spot added successfully!');
       setStudySpot({ name: '', description: '', address: '', tags: [], coordinates: { lat: 0, lng: 0 }, image: '' });
-    } catch (err) {
+    } catch (err: any) {
+      // 'any' allows us to access .message safely here
       setError(err.message || 'Failed to add study spot');
     } finally {
       setIsSubmitting(false);
@@ -68,22 +81,22 @@ const AddStudySpot = () => {
   };
 
   const availableTags = ['outdoors', 'indoors', 'free', 'wifi', 'quiet', 'outlets'];
-  const { isLoaded, loadError } = useLoadScript({
-    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '',
-    libraries,
-    version: 'beta',
-  });
 
-  const autocompleteRef = useRef(null);
+  const placesLibrary = useMapsLibrary('places');
+  
+  // Explicitly type the ref as an HTML Div
+  const autocompleteRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!isLoaded || !autocompleteRef.current) return;
+    if (!placesLibrary || !autocompleteRef.current) return;
 
-    const autocompleteElement = new google.maps.places.PlaceAutocompleteElement();
+    // Use 'any' here to bypass the specific PlacesLibrary type definition issue
+    const autocompleteElement = new (placesLibrary as any).PlaceAutocompleteElement();
     autocompleteElement.placeholder = 'Enter address';
     autocompleteRef.current.appendChild(autocompleteElement);
 
-    autocompleteElement.addEventListener('gmp-select', async (event) => {
+    // Define the custom event type
+    autocompleteElement.addEventListener('gmp-select', async (event: any) => {
       const { placePrediction } = event;
       const place = placePrediction.toPlace();
       await place.fetchFields({ fields: ['displayName', 'formattedAddress', 'location', 'photos'] });
@@ -109,11 +122,16 @@ const AddStudySpot = () => {
       }));
     });
 
-    return () => autocompleteElement.remove();
-  }, [isLoaded]);
+    return () => {
+      if (autocompleteRef.current && autocompleteElement.parentNode === autocompleteRef.current) {
+        autocompleteRef.current.removeChild(autocompleteElement);
+      }
+    };
+  }, [placesLibrary]);
 
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') e.preventDefault();
+  // Type the keyboard event
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (e.key === 'Enter' && (e.target as HTMLElement).tagName !== 'TEXTAREA') e.preventDefault();
   };
 
   return (
@@ -143,7 +161,7 @@ const AddStudySpot = () => {
               </div>
               <div>
                 <label className="block text-sm font-semibold mb-1">Address</label>
-                {isLoaded ? <div ref={autocompleteRef} className="w-full"></div> : <input type="text" name="address" placeholder="Loading..." disabled className="w-full p-2 rounded bg-[#1e293b] text-white placeholder-gray-400" />}
+                {placesLibrary ? <div ref={autocompleteRef} className="w-full"></div> : <input type="text" name="address" placeholder="Loading..." disabled className="w-full p-2 rounded bg-[#1e293b] text-white placeholder-gray-400" />}
                 {studySpot.image && (
                   <div className="mt-4">
                     <img
